@@ -1,3 +1,3 @@
-# ProteinBatcher 0.0.1
+# ProteinBatcher 0.99.0
 
 * Initial Bioconductor submission.
