@@ -2,7 +2,7 @@
 
 **ProteinBatcher** is a Bioconductor-style R package for **standardized, design downstream analysis of label-free quantitative proteomics** tables (with a focus on **DIA-NN-style DIA outputs**).
 It provides utilities to **read, validate and harmonize quantitative proteomics tables**, convert them to **SummarizedExperiment**, run **imputation-aware differential abundance testing with limma**,
-and optionally generate **publication-ready volcano plots and dereg ul ograms**.
+and optionally generate **publication-ready volcano plots and deregulograms**.
 
 ---
 
