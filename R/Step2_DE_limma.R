@@ -1,0 +1,171 @@
+#' Differential abundance testing with limma (imputation-aware FDR)
+#'
+#' Performs differential testing on an imputed
+#' SummarizedExperiment using \pkg{limma}. The function fits a
+#' linear model defined by `design_formula`, applies user-specified contrasts
+#' (`test`) and, optionally, interaction-related contrasts
+#' (`test_interaction`), and stores the resulting statistics in
+#' \code{rowData(se)}.
+#'
+#' A key feature of this customized implementation is that adjusted p-values
+#' (BH-FDR) are recomputed after excluding features that were imputed as
+#' \emph{LDV} in both groups of a tested contrast, using an
+#' \code{imputation_map} stored in \code{metadata(se)}. This prevents
+#' artificially significant results driven by LDV/LDV imputations.
+#'
+#' When `paired = TRUE`, the function ensures the design includes
+#' \code{replicate} by updating the right-hand side of `design_formula`
+#' (it does not overwrite other covariates such as batch). When
+#' `block_effect = TRUE`, the function fits the model using
+#' \code{limma::duplicateCorrelation()} with \code{colData(se)$block} as
+#' blocking variable.
+#'
+#' @param se A SummarizedExperiment. The assay is taken from
+#'   \code{SummarizedExperiment::assay(se)}.
+#' @param type Character. Currently only \code{"manual"} is supported (kept for
+#' API compatibility).
+#' @param test Character vector of contrasts to test for the main effect.
+#'   Contrasts must be supplied in the \code{"A_vs_B"} format (internally
+#'   translated to \code{"A - B"} for \pkg{limma}).
+#' @param test_interaction Character vector defining interaction-related tests.
+#'   Use \code{"NA"} (default) to skip interaction testing. If provided (not
+#'   \code{"NA"}), results for these contrasts will also be added to
+#'   \code{rowData(se)}.
+#' @param design_formula A model formula describing the linear model. Default is
+#'   \code{~ 0 + condition}. The function expects `condition` to be present in
+#'   \code{colData(se)} and will relevel it to `ref_condition`. If
+#'   `paired = TRUE` and \code{replicate} is not present in the formula,
+#'   \code{replicate} is added.
+#' @param ref_condition Character scalar. Reference level for \code{condition}.
+#'   Must be a level present in \code{colData(se)$condition}.
+#' @param paired Logical. If \code{TRUE}, \code{replicate} is added to the
+#' design (if absent) to support paired/repeated-measure designs for technical
+#' replicates.
+#' @param block_effect Logical. If \code{TRUE}, fits limma with a blocking
+#' factor using \code{colData(se)$block} and
+#' \code{limma::duplicateCorrelation()}.
+#'
+#' @details
+#' Results are written into \code{rowData(se)} as wide columns per contrast,
+#' using prefixes corresponding to each tested comparison. For each contrast,
+#' the following statistics are stored (naming depends on internal helpers):
+#' \itemize{
+#'   \item \code{diff}: log2 fold-change estimate (\code{logFC})
+#'   \item \code{CI.L}, \code{CI.R}: confidence interval bounds (if computed)
+#'   \item \code{p.val}: raw p-value
+#'   \item \code{p.adj}: BH-adjusted p-value, recomputed after excluding
+#'   LDV/LDV
+#' }
+#'
+#' Interaction handling is optional and depends on `test_interaction`. In the
+#' associated proteomics workflow, interaction tests are used to distinguish
+#' "common" effects from "interaction" effects (e.g., condition-by-sex or
+#' condition-by-batch interactions).
+#'
+#' @return The input SummarizedExperiment with additional columns
+#'   appended to \code{rowData(se)} containing differential testing results.
+#'
+#' @seealso
+#' \code{\link[limma]{lmFit}}, \code{\link[limma]{makeContrasts}},
+#' \code{\link[limma]{contrasts.fit}}, \code{\link[limma]{eBayes}},
+#' \code{\link[limma]{topTable}}, \code{\link[limma]{duplicateCorrelation}}
+#'
+#' @examples
+#' library(SummarizedExperiment)
+#'
+#' ## Toy proteomics matrix: 4 proteins x 4 samples
+#' mat <- matrix(
+#'   c(
+#'     10, 11,  9, 10,
+#'     20, 21, 19, 20,
+#'     5,  NA,  6,  7,
+#'     NA, NA, NA, NA
+#'   ),
+#'   nrow = 4, byrow = TRUE,
+#'   dimnames = list(
+#'     paste0("p", 1:4),
+#'     paste0("s", 1:4)
+#'   )
+#' )
+#'
+#' ## Sample metadata
+#' cd <- DataFrame(
+#'   condition = c("A", "A", "B", "B"),
+#'   batch     = c("d1","d1","d2","d2"),
+#'   replicate = c("r1","r2","r1","r2"),
+#'   donor_id  = c("1","1","1","1"),
+#'   label     = colnames(mat),
+#'   row.names = colnames(mat)
+#' )
+#'
+#' ## Feature metadata
+#' rd <- DataFrame(
+#'   name  = rownames(mat),
+#'   Genes = paste0("G", 1:4),
+#'   row.names = rownames(mat)
+#' )
+#'
+#' se <- SummarizedExperiment(
+#'   assays  = list(intensity = mat),
+#'   colData = cd,
+#'   rowData = rd
+#' )
+#'
+#' ## Imputation map required by the FDR logic
+#' imp_map <- matrix(
+#'   "none", nrow = nrow(mat), ncol = ncol(mat),
+#'   dimnames = dimnames(mat)
+#' )
+#' metadata(se)$imputation_map <- imp_map
+#'
+#' ## Run differential testing (main effect only)
+#' se_out <- test_limma_customized(
+#'   se = se,
+#'   test = "B_vs_A",
+#'   test_interaction = "NA",
+#'   design_formula = ~ 0 + condition + batch,
+#'   ref_condition = "A"
+#' )
+#'
+#' ## Results are appended to rowData(se_out)
+#' rowData(se_out)
+#' @export
+test_limma_customized <- function(
+        se, type = c("manual"), test = NULL, test_interaction = "NA",
+        design_formula = stats::formula(~ 0 + condition),
+        ref_condition = NULL, paired = FALSE, block_effect = FALSE
+){
+    .tl_check_inputs(se, design_formula, ref_condition, test, test_interaction)
+    cd <- as.data.frame(SummarizedExperiment::colData(se))
+
+    if (is.null(design_formula)){
+        design_formula <- stats::as.formula("~ 0 + condition")
+    } else if (paired && !"replicate" %in% all.vars(design_formula)){
+        design_formula <- stats::update(design_formula, . ~ . + replicate)
+    }
+
+    cd$condition <- stats::relevel(factor(cd$condition), ref = ref_condition)
+
+    cond_imp_map <- .tl_condition_imputation_map(se, cd)
+
+    raw <- SummarizedExperiment::assay(se)
+    design <- .tl_make_design(design_formula, cd)
+    fit <- .tl_fit_limma(raw, design, cd, block_effect)
+
+    map_mn <- stats::setNames(levels(cd$condition),
+                                make.names(levels(cd$condition)))
+    res_main <- .tl_run_contrasts(fit, design, test, cond_imp_map, map_mn,
+                                    ref_condition)
+    SummarizedExperiment::rowData(se) <- .tl_merge_rowdata(se, res_main)
+
+    if (!("NA" %in% test_interaction)) {
+        res_int <- .tl_run_contrasts(fit, design, test_interaction,
+                                    cond_imp_map, map_mn, ref_condition)
+        SummarizedExperiment::rowData(se) <- .tl_merge_rowdata(se, res_int)
+        full <- .tl_build_full_contrasts(test, test_interaction)
+        res_full <- .tl_run_contrasts(fit, design, full, cond_imp_map,
+                                        map_mn, ref_condition)
+        SummarizedExperiment::rowData(se) <- .tl_merge_rowdata(se, res_full)
+    }
+    se
+}

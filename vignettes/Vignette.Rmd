@@ -1,0 +1,241 @@
+---
+title: "ProteinBatcher workflow"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{ProteinBatcher workflow}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+Suggests:
+    knitr,
+    rmarkdown,
+    htmltools
+---
+
+# Overview
+Quantitative proteomics is well supported in Bioconductor for individual
+downstream tasks such as differential testing (e.g. via limma), missing-value
+imputation, or visualization. However, fully integrated downstream workflows
+that combine these steps in a single, reproducible, and design-aware pipeline
+are comparatively scarce, particularly for label-free proteomics. 
+
+ProteinBatcher addresses this gap by providing a cohesive downstream analysis
+framework that focuses on three aspects that are often difficult to combine in
+practice:
+
+1. Flexible experimental designs
+    - The package is built around limma and supports:
+    - multi-factor designs (e.g. condition + batch, condition + sex),
+    - interaction testing, 
+    - paired and repeated-measures designs,
+    - correlation-aware models via duplicateCorrelation.
+
+    This flexibility allows users to model common proteomics scenarios such as
+    batch effects, donor effects, or preparation-day effects without rewriting
+    analysis code for each experiment.
+    
+2. End-to-end standardization of downstream steps. ProteinBatcher integrates,
+in a single workflow:
+    - missingness-based filtering,
+    - mean and left-censored (LDV) imputation strategies,
+    - differential abundance testing,
+    - systematic separation of main, common, and interaction effects,
+    - generation of plot-ready result objects.
+
+    By enforcing a consistent structure for inputs, models, and outputs, the
+    package reduces ad hoc analysis choices and improves reproducibility across
+    experiments.
+    
+3. Interpretation-oriented visualizations. In addition to standard volcano
+plots, ProteinBatcher implements:
+    - deregulograms, which compare full effects across the two levels of an
+        interaction factor (e.g. batch day 1 vs day 2, female vs male).
+        Deregulograms complement interaction volcano plots by emphasizing effect
+        concordance and magnitude, rather than statistical significance alone,
+        and facilitate biological interpretation of interaction effects.
+
+Importantly, ProteinBatcher is not intended to replace existing Bioconductor
+infrastructure, but rather to orchestrate and standardize well-established
+methods (notably limma) into a coherent downstream proteomics workflow.
+The package is therefore particularly suited for users who repeatedly analyze
+proteomics experiments with similar structure but varying designs, and who need
+a balance between automation and modeling flexibility.
+
+This vignette documents the workflow and outputs, but does not execute the
+full analysis. All examples rely on precomputed results stored in
+inst/extdata, ensuring portability and fast rendering during package checks.
+
+# Relationship with the Bioconductor ecosystem
+
+ProteinBatcher is designed to operate within the standard Bioconductor
+infrastructure, rather than introducing new data containers or statistical
+methods. Its functionality is built by extending existing Bioconductor
+components in a consistent downstream workflow.
+
+All intermediate and final results in ProteinBatcher are stored in
+SummarizedExperiment objects. Statistical testing in ProteinBatcher is performed
+using limma, a well-established Bioconductor package for linear modeling with
+empirical Bayes moderation. Missing-value filtering and imputation are
+implemented as modular steps that operate directly on SummarizedExperiment
+objects. 
+
+# Input data and workflow parameters
+
+ProteinBatcher needs two input data objects and a set of workflow parameters.
+This distinction is important: the inputs define the data to be analysed,
+whereas the parameters control how the analysis is performed.
+
+## Input data
+
+ProteinBatcher expects exactly two input datasets:
+
+1. Quantitative matrix: A feature-by-sample matrix containing quantitative
+proteomics measurements (typically protein groups). Rows correspond to
+quantified features and columns to samples. The matrix is assumed to originate
+from an upstream workflow (e.g. FragPipe or DIANN), but ProteinBatcher does not
+depend on a specific quantification tool.
+
+2. Sample annotation table: A tab-delimited table describing the experimental
+design and linking each sample to its biological and technical metadata.
+
+Both inputs are provided in this vignette as example datasets shipped with the
+package.
+
+```{r}
+# Load package
+library(ProteinBatcher)
+library(readr)
+
+# Input files shipped with the package
+path_annotation <- system.file(
+  "extdata", "annotation_HaCaT.tsv",
+  package = "ProteinBatcher"
+)
+
+path_pgmatrix <- system.file(
+  "extdata",
+  "2024MK017_HaCaT_Stimulation_1to24_Astral_report.pg_matrix.tsv",
+  package = "ProteinBatcher"
+)
+
+# Output directory (portable, not used during vignette build)
+path_output <- tempdir()
+
+# Inspect annotation structure
+ann <- readr::read_tsv(path_annotation)
+```
+
+## Sample annotation structure
+The annotation table must contain at least a condition column defining the main
+experimental comparison. Additional columns enable more complex designs such as
+batch correction, paired analyses, and interaction testing.
+
+The following columns are supported:
+
+- file: raw data file identifier
+- sample / sample_name: sample identifiers
+- condition: main experimental condition of interest
+- replicate: technical replicate identifier (repeated measurements of the
+    same sample under the same condition)
+- block: biological replicate or donor identifier
+- batch: batch or preparation factor (e.g. factor to control for against
+    condition)
+
+Only columns explicitly referenced in the design formula are required.
+
+## Workflow parameters
+
+In addition to the input data, ProteinBatcher requires several parameters that
+define how the analysis is carried out. These parameters do not represent
+additional inputs, but control filtering, modeling, and output generation.
+These parameters provide flexibility on the specific analysis to conduct.
+
+Key parameters include:
+
+- percent_missing: threshold used for missingness-based filtering
+- tests: main condition contrasts to be evaluated
+- tests_interaction: interaction contrasts or coefficients (optional)
+- formula: limma design formula defining main effects and interactions
+- reference_condition: reference level for the condition factor
+- paired / block_effect: options for paired designs and correlation-aware
+    models
+- ldv_source: strategy for LDV (left-censored) imputation
+- plots: whether to generate output tables and PDF plots
+
+These parameters are illustrated in the workflow section below, but the full
+analysis is not executed during vignette rendering.
+
+
+# Example 1: Workflow with interaction testing (condition-by-batch)
+
+```{r}
+# Parameters
+experiment <- "HaCaT"
+percent_missing <- 50
+
+formula <- formula(~ 0 + condition + batch + condition:batch)
+tests <- c(
+  "IL13_vs_NoTreated",
+  "IL22_vs_NoTreated",
+  "COMBO_vs_NoTreated"
+)
+tests_interaction <- c(
+  "IL13.batchday2",
+  "IL22.batchday2",
+  "COMBO.batchday2"
+)
+reference_condition <- "NoTreated"
+
+# Workflow
+res <- run_proteomics_pipeline(
+  path_pgmatrix        = path_pgmatrix,
+  path_annotation      = path_annotation,
+  path_output          = path_output,
+  tests                = tests,
+  tests_interaction    = tests_interaction,
+  formula              = formula,
+  reference_condition  = reference_condition,
+  percent_missing      = percent_missing,
+  ldv_source           = "per-condition",
+  experiment           = experiment,
+  plots                = FALSE # Use TRUE to generate outputs
+)
+```
+
+## PDF outputs
+
+```{r}
+# List available PDFs
+pdf_dir <- system.file("extdata", package = "ProteinBatcher")
+list.files(pdf_dir, pattern = "\\.pdf$", full.names = FALSE)
+```
+```{r}
+# Embed a PDF (HTML vignette)
+library(htmltools)
+
+embed_pdf <- function(fname, height = 600) {
+  f <- system.file("extdata", fname, package = "ProteinBatcher")
+  tagList(
+    tags$embed(
+      src = f, type = "application/pdf",
+      width = "100%", height = height
+    ),
+    tags$p(tags$a(href = f, "Download PDF"))
+  )
+}
+
+embed_pdf("2024MK017_ELMO_001to024_6_HaCaT_Stimulation_Volcano_NoTreated_vs_IL13.pdf")
+embed_pdf("2024MK017_ELMO_001to024_6_HaCaT_Stimulation_Volcano_NoTreated_vs_IL22.pdf")
+embed_pdf("2024MK017_ELMO_001to024_6_HaCaT_Stimulation_Volcano_NoTreated_vs_COMBO.pdf")
+```
+
+# Example 2: Workflow without interaction testing
+
+
+
+
+# sessionInfo()
+
+```{r}
+sessionInfo()
+```
+

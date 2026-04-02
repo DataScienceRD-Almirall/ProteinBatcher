@@ -1,0 +1,25 @@
+file	sample	sample_name	condition	replicate	batch	donor_id
+Y:\data\orbitrap_astral1\Raw\2502\ELMO\2024MK017_ELMO_001_01_4pto.raw	NoTreated_1	NoTreated_1	NoTreated	1	day1	1
+Y:\data\orbitrap_astral1\Raw\2502\ELMO\2024MK017_ELMO_002_01_4pto.raw	IL13 _1	IL13 _1	IL13	1	day1	1
+Y:\data\orbitrap_astral1\Raw\2502\ELMO\2024MK017_ELMO_003_01_4pto.raw	IL22_1	IL22_1	IL22	1	day1	1
+Y:\data\orbitrap_astral1\Raw\2502\ELMO\2024MK017_ELMO_004_01_4pto.raw	COMBO _1	COMBO _1	COMBO	1	day1	1
+Y:\data\orbitrap_astral1\Raw\2502\ELMO\2024MK017_ELMO_005_01_4pto.raw	NoTreated_2	NoTreated_2	NoTreated	1	day1	1
+Y:\data\orbitrap_astral1\Raw\2502\ELMO\2024MK017_ELMO_006_01_4pto.raw	IL13 _2	IL13 _2	IL13	1	day1	1
+Y:\data\orbitrap_astral1\Raw\2502\ELMO\2024MK017_ELMO_007_01_4pto.raw	IL22_2	IL22_2	IL22	1	day1	1
+Y:\data\orbitrap_astral1\Raw\2502\ELMO\2024MK017_ELMO_008_01_4pto.raw	COMBO _2	COMBO _2	COMBO	1	day1	1
+Y:\data\orbitrap_astral1\Raw\2502\ELMO\2024MK017_ELMO_009_01_4pto.raw	NoTreated_3	NoTreated_3	NoTreated	1	day1	1
+Y:\data\orbitrap_astral1\Raw\2502\ELMO\2024MK017_ELMO_010_01_4pto.raw	IL13 _3	IL13 _3	IL13	1	day1	1
+Y:\data\orbitrap_astral1\Raw\2502\ELMO\2024MK017_ELMO_011_01_4pto.raw	IL22_3	IL22_3	IL22	1	day1	1
+Y:\data\orbitrap_astral1\Raw\2502\ELMO\2024MK017_ELMO_012_01_4pto.raw	COMBO _3	COMBO _3	COMBO	1	day1	1
+Y:\data\orbitrap_astral1\Raw\2502\ELMO\2024MK017_ELMO_013_01_4pto.raw	NoTreated_4	NoTreated_4	NoTreated	1	day2	1
+Y:\data\orbitrap_astral1\Raw\2502\ELMO\2024MK017_ELMO_014_01_4pto.raw	IL13 _4	IL13 _4	IL13	1	day2	1
+Y:\data\orbitrap_astral1\Raw\2502\ELMO\2024MK017_ELMO_015_01_4pto.raw	IL22_4	IL22_4	IL22	1	day2	1
+Y:\data\orbitrap_astral1\Raw\2502\ELMO\2024MK017_ELMO_016_01_4pto.raw	COMBO _4	COMBO _4	COMBO	1	day2	1
+Y:\data\orbitrap_astral1\Raw\2502\ELMO\2024MK017_ELMO_017_01_4pto.raw	NoTreated_5	NoTreated_5	NoTreated	1	day2	1
+Y:\data\orbitrap_astral1\Raw\2502\ELMO\2024MK017_ELMO_018_02_4pto.raw	IL13 _5	IL13 _5	IL13	1	day2	1
+Y:\data\orbitrap_astral1\Raw\2502\ELMO\2024MK017_ELMO_019_01_4pto.raw	IL22_5	IL22_5	IL22	1	day2	1
+Y:\data\orbitrap_astral1\Raw\2502\ELMO\2024MK017_ELMO_020_01_4pto.raw	COMBO _5	COMBO _5	COMBO	1	day2	1
+Y:\data\orbitrap_astral1\Raw\2502\ELMO\2024MK017_ELMO_021_01_4pto.raw	NoTreated_6	NoTreated_6	NoTreated	1	day2	1
+Y:\data\orbitrap_astral1\Raw\2502\ELMO\2024MK017_ELMO_022_01_4pto.raw	IL13 _6	IL13 _6	IL13	1	day2	1
+Y:\data\orbitrap_astral1\Raw\2502\ELMO\2024MK017_ELMO_023_01_4pto.raw	IL22_6	IL22_6	IL22	1	day2	1
+Y:\data\orbitrap_astral1\Raw\2502\ELMO\2024MK017_ELMO_024_001_4pto.raw	COMBO _6	COMBO _6	COMBO	1	day2	1
