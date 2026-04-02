@@ -249,6 +249,11 @@ Together, these tables allow direct comparison of the dataset before and after
 filtering and imputation, which is critical for quality control and
 interpretability in label‑free proteomics analyses.
 
+
+Note: For package size reasons, this vignette uses a reduced example of the
+imputation summary table. The full table is generated during a standard
+workflow run.
+
 ## Differential effects - IL13 vs NoTreated contrast
 
 From this point onwards, we focus exclusively on the IL13 vs NoTreated
