@@ -1,0 +1,17 @@
+# ============================
+# ProteinBatcher contrast file
+# ============================
+
+[design]
+formula = ~ 0 + condition + batch + condition:batch
+reference_condition = NoTreated
+
+[tests]
+IL13_vs_NoTreated
+IL22_vs_NoTreated
+COMBO_vs_NoTreated
+
+[interaction_tests]
+IL13.batchday2
+IL22.batchday2
+COMBO.batchday2
