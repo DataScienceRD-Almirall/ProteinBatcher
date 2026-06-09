@@ -293,12 +293,16 @@ run_proteomics_pipeline <- function(
                                   lfc = 1, label_col = "Genes"
                 )
             }
+            out <- list(se_raw = se0, se_filt = filt$se_filt,
+                        removed = filt$removed, se_imp   = se_imp,
+                        effects = list(output_main_all, output_interaction,
+                                       output_common))
+            return(out)
         }
-        return(list(se_raw = se0, se_filt = filt$se_filt,removed = filt$removed,
-                    se_imp   = se_imp,
-                    effects = list(output_main_all, output_interaction,
-                                   output_common)
-        ))
+        return(list(se_raw = se0, se_filt = filt$se_filt,
+                    removed = filt$removed, se_imp   = se_imp,
+                    effects = list(output_main_all,
+                                   output_common)))
     }else{
         return(list(se_raw = se0, se_filt = filt$se_filt,removed = filt$removed,
                     se_imp   = se_imp
