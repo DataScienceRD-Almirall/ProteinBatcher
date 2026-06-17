@@ -274,6 +274,7 @@ run_proteomics_pipeline <- function(
             file_tag="CommonEffect",name_col = "Genes",name_imputed = "imputed"
         )
         # 5) Deregulogram (only if interaction tested AND factor has 2 levels)
+        output_interaction <- NULL
         if (!("NA" %in% tests_interaction)) {
             # Interaction: effects with significant interaction
             output_interaction <- .pp_export_volcano_tables(
