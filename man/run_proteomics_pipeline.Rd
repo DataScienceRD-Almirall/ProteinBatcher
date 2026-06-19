@@ -75,14 +75,17 @@ A named list with:
 \item{\code{se_raw}}{Raw SummarizedExperiment
 imported from files.}
 \item{\code{se_filt}}{Filtered SummarizedExperiment.}
-\item{\code{removed}}{Object describing filtered-out features (typically a
-data.frame).}
+\item{\code{removed}}{A \code{data.frame} describing filtered-out features.}
 \item{\code{se_imp}}{Imputed SummarizedExperiment.}
 \item{\code{effects}}{
-A list of exported objects (or \code{NULL} entries when
-\code{plots = FALSE}):
-main-effect exports, interaction-effect exports, and common-effect
-exports.
+A named list keyed by main contrast (the values of \code{tests}). Each
+element is itself a list of three \code{SummarizedExperiment} objects:
+\code{all_common_effect}, \code{common_effect} and
+\code{interaction_effect}. Per-contrast statistics are stored in their
+\code{rowData()} using the \code{"<stat>_<contrast>"} naming convention
+(e.g. \code{log2FC_IL13_vs_NoTreated}). This element is always returned,
+independently of \code{plots}, so a contrast can be accessed with
+\code{$}, e.g. \code{res$effects$IL13_vs_NoTreated$all_common_effect}.
 }
 }
 }
@@ -266,7 +269,10 @@ res <- run_proteomics_pipeline(
 ## Inspect outputs
 names(res)
 res$se_imp
-names(res)
+
+## `effects` is keyed by contrast, so it can be accessed with `$`:
+names(res$effects)
+res$effects$IL13_vs_NoTreated$all_common_effect
 }
 \seealso{
 \code{\link{test_limma_customized}},

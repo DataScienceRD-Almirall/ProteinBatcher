@@ -3,7 +3,7 @@
 #' @noRd
 .impute_validate_inputs <- function(se, threshold,
                                     ldv_source = c("global",
-                                                    "per-condition")) {
+                                                   "per-condition")) {
     if (!methods::is(se, "SummarizedExperiment"))
         stop("`se` must be aSummarizedExperiment.")
     if (!is.numeric(threshold) || length(threshold) != 1L ||
@@ -76,7 +76,7 @@
     sdv <- apply(X, 1L, stats::sd, na.rm = TRUE)
     if (is.null(sd_fallback)) {
         sd_fallback <- stats::median(sdv[is.finite(sdv) & sdv > 0],
-                                        na.rm = TRUE)
+                                     na.rm = TRUE)
         if (!is.finite(sd_fallback)) sd_fallback <- 0.1
     }
     sdv[!is.finite(sdv) | sdv <= 0] <- sd_fallback
@@ -87,7 +87,7 @@
 #' @keywords internal
 #' @noRd
 .impute_ldv_fill <- function(X1, cond, ldv, sd_prot, ldv_source, lower_bound,
-                                imp_map) {
+                             imp_map) {
     X2 <- X1
     na_pos <- which(is.na(X2), arr.ind = TRUE)
     if (nrow(na_pos)) {
@@ -143,7 +143,7 @@
     # Check that annotation file has columns
     # file	sample	sample_name	condition	replicate	donor_id	batch
     required_cols <- c("file","sample","sample_name","condition","replicate",
-                        "batch","donor_id")
+                       "batch","donor_id")
     # Read ONLY the header (fast) and try common delimiters
     # 1) tab (typical for .tsv/.txt)
     ann_head <- tryCatch(
@@ -179,7 +179,7 @@
     if (anyDuplicated(coln)) {
         dups <- unique(coln[duplicated(coln)])
         stop("path_annotation has duplicated column names: ",
-                paste(dups, collapse = ", "))
+             paste(dups, collapse = ", "))
     }
     missing_cols <- setdiff(required_cols, coln)
     if (length(missing_cols) > 0) {
@@ -217,8 +217,9 @@
 #' @noRd
 .pp_write_filtered <- function(removed_df, path_output, experiment){
     out <- file.path(path_output,
-                     paste0(experiment, "_filtered_out_proteins.xlsx"))
-    writexl::write_xlsx(removed_df, out)
+                     paste0(experiment, "_filtered_out_proteins.csv"))
+    utils::write.csv(removed_df, out, row.names = FALSE)
+    invisible(out)
 }
 
 #' @keywords internal
@@ -231,10 +232,14 @@
     after  <- cbind(gene = SummarizedExperiment::rowData(se_after)$Genes,
                     as.data.frame(SummarizedExperiment::assay(se_after)))
 
-    out <- file.path(path_output,
-                     paste0(experiment, "_Imputation_step.xlsx"))
+    out_before <- file.path(path_output,
+                            paste0(experiment, "_Imputation_before.csv"))
+    out_after  <- file.path(path_output,
+                            paste0(experiment, "_Imputation_after.csv"))
 
-    writexl::write_xlsx(list(Before = before, After = after), out)
+    utils::write.csv(before, out_before, row.names = FALSE)
+    utils::write.csv(after,  out_after,  row.names = FALSE)
+    invisible(c(before = out_before, after = out_after))
 }
 
 #' @keywords internal
@@ -244,9 +249,9 @@ readQuantTable <- function (quant_table_path, type = "TMT", level = NULL,
                             additional_cols = NULL)
 {
     temp_data <- utils::read.table(quant_table_path, header = TRUE,
-                                    fill = TRUE, sep = "\t", quote = "",
-                                    comment.char = "", blank.lines.skip = FALSE,
-                                    check.names = FALSE)
+                                   fill = TRUE, sep = "\t", quote = "",
+                                   comment.char = "", blank.lines.skip = FALSE,
+                                   check.names = FALSE)
     colnames(temp_data) <- unique(colnames(temp_data), "_")
     if(type == "DIA"){
         temp <- data.table::melt.data.table(
@@ -324,17 +329,20 @@ make_unique <- function (proteins, names, ids, delim = ";")
         stop("'", ids, "' is not a column in '", deparse(substitute(proteins)),
              "'", call. = FALSE)
     }
-    if (tibble::is_tibble(proteins)) {
+    if (inherits(proteins, "tbl_df")) {
         proteins <- as.data.frame(proteins)
     }
     double_NAs <- apply(proteins[, c(names, ids)], 1, function(x) all(is.na(x)))
     if (any(double_NAs)) {
         stop("NAs in both the 'names' and 'ids' columns")
     }
-    proteins_unique <- proteins %>% dplyr::mutate(name = get(names),
-                        ID = get(ids), name =
-                            make.unique(ifelse(name == "" | is.na(name),
-                                                ID, name)))
+    proteins_unique <- proteins
+    proteins_unique$name <- proteins_unique[[names]]
+    proteins_unique$ID <- proteins_unique[[ids]]
+    nm <- proteins_unique$name
+    use_id <- is.na(nm) | nm == ""
+    nm[use_id] <- proteins_unique$ID[use_id]
+    proteins_unique$name <- make.unique(nm)
     return(proteins_unique)
 }
 
@@ -348,7 +356,7 @@ make_se_customized <- function (proteins_unique, columns, expdesign,
         stop("'name' and/or 'ID' columns are not present in '",
              deparse(substitute(proteins_unique)), "'.\nRun make_unique() to
                 obtain the required columns",
-                call. = FALSE)
+             call. = FALSE)
     }
     if (any(!c("label", "condition", "replicate") %in% colnames(expdesign))) {
         stop("'label', 'condition' and/or 'replicate' columns",
@@ -359,10 +367,10 @@ make_se_customized <- function (proteins_unique, columns, expdesign,
                 make_se_customized() with the appropriate columns as argument",
              call. = FALSE)
     }
-    if (tibble::is_tibble(proteins_unique)) {
+    if (inherits(proteins_unique, "tbl_df")) {
         proteins_unique <- as.data.frame(proteins_unique)
     }
-    if (tibble::is_tibble(expdesign)) {
+    if (inherits(expdesign, "tbl_df")) {
         expdesign <- as.data.frame(expdesign)
     }
     rownames(proteins_unique) <- proteins_unique$ID
@@ -387,7 +395,8 @@ make_se_customized <- function (proteins_unique, columns, expdesign,
     row_data <- proteins_unique[, -columns]
     rownames(row_data) <- row_data$ID
     se <- SummarizedExperiment::SummarizedExperiment(
-        assays = as.matrix(raw), colData = expdesign, rowData = row_data,
+        assays = list(intensity = as.matrix(raw)),
+        colData = expdesign, rowData = row_data,
         metadata = list(log2transform = log2transform, exp = exp,
                         lfq_type = lfq_type, exp_type = exp_type,
                         level = level))

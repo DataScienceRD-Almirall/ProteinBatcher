@@ -97,16 +97,20 @@ plot_volcano_customized <- function(
         plot = TRUE, alpha = 0.05, lfc = 1
 ){
     if (is.integer(label_size)) label_size <- as.numeric(label_size)
-    assertthat::assert_that(
-        inherits(dep, "SummarizedExperiment"),
-        is.character(contrast), length(contrast) == 1,
-        is.numeric(label_size), length(label_size) == 1,
-        is.logical(add_names), length(add_names) == 1,
-        is.logical(adjusted), length(adjusted) == 1,
-        is.logical(plot), length(plot) == 1
-    )
+    ok <- inherits(dep, "SummarizedExperiment") &&
+        is.character(contrast) && length(contrast) == 1L &&
+        is.numeric(label_size) && length(label_size) == 1L &&
+        is.logical(add_names) && length(add_names) == 1L &&
+        is.logical(adjusted) && length(adjusted) == 1L &&
+        is.logical(plot) && length(plot) == 1L
+    if (!ok) {
+        stop("Invalid arguments to plot_volcano_customized(): check `dep` ",
+             "(SummarizedExperiment), `contrast` (single string), ",
+             "`label_size` (single numeric), and the logical flags ",
+             "`add_names`, `adjusted`, `plot`.", call. = FALSE)
+    }
     df <- .pv_build_volcano_df(dep, contrast, name_col, name_imputed, adjusted,
-                                alpha, lfc)
+                               alpha, lfc)
     if (!plot) return(.pv_export_df(df, adjusted))
     .pv_plot_volcano(df, contrast, label_size, add_names, adjusted)
 }
@@ -176,7 +180,7 @@ plot_volcano_customized <- function(
         effect_slot = c("all_common_effect","common_effect",
                         "interaction_effect"),
         file_tag = c("MainEffect_AllProteins","CommonEffect",
-                    "InteractionEffect"),
+                     "InteractionEffect"),
         plot_contrasts = NULL,
         name_col = "Genes", name_imputed = "imputed", alpha = 0.05, lfc = 1
 ){
@@ -192,13 +196,13 @@ plot_volcano_customized <- function(
         if (is.null(obj) || nrow(obj) == 0) return(NULL)
 
         pdf_file <- file.path(path_output, paste0(experiment, "_", file_tag,
-                                                "_", plot_contrasts[i], ".pdf"))
+                                                  "_", plot_contrasts[i], ".pdf"))
         grDevices::pdf(pdf_file)
         print(plot_volcano_customized(obj, plot_contrasts[i],
-                                        name_col = name_col,
-                                        name_imputed = name_imputed,
-                                        alpha = alpha, lfc = lfc,
-                                        adjusted = TRUE, plot = TRUE))
+                                      name_col = name_col,
+                                      name_imputed = name_imputed,
+                                      alpha = alpha, lfc = lfc,
+                                      adjusted = TRUE, plot = TRUE))
         grDevices::dev.off()
         rd <- SummarizedExperiment::rowData(obj)
         setNames(list(as.data.frame(rd)), tests[i])

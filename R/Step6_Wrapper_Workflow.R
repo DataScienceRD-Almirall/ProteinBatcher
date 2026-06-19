@@ -156,14 +156,17 @@
 #'   \item{\code{se_raw}}{Raw SummarizedExperiment
 #'   imported from files.}
 #'   \item{\code{se_filt}}{Filtered SummarizedExperiment.}
-#'   \item{\code{removed}}{Object describing filtered-out features (typically a
-#'   data.frame).}
+#'   \item{\code{removed}}{A \code{data.frame} describing filtered-out features.}
 #'   \item{\code{se_imp}}{Imputed SummarizedExperiment.}
 #'   \item{\code{effects}}{
-#'     A list of exported objects (or \code{NULL} entries when
-#'     \code{plots = FALSE}):
-#'     main-effect exports, interaction-effect exports, and common-effect
-#'     exports.
+#'     A named list keyed by main contrast (the values of \code{tests}). Each
+#'     element is itself a list of three \code{SummarizedExperiment} objects:
+#'     \code{all_common_effect}, \code{common_effect} and
+#'     \code{interaction_effect}. Per-contrast statistics are stored in their
+#'     \code{rowData()} using the \code{"<stat>_<contrast>"} naming convention
+#'     (e.g. \code{log2FC_IL13_vs_NoTreated}). This element is always returned,
+#'     independently of \code{plots}, so a contrast can be accessed with
+#'     \code{$}, e.g. \code{res$effects$IL13_vs_NoTreated$all_common_effect}.
 #'   }
 #' }
 #'
@@ -228,7 +231,10 @@
 #' ## Inspect outputs
 #' names(res)
 #' res$se_imp
-#' names(res)
+#'
+#' ## `effects` is keyed by contrast, so it can be accessed with `$`:
+#' names(res$effects)
+#' res$effects$IL13_vs_NoTreated$all_common_effect
 #' @export
 run_proteomics_pipeline <- function(
         path_pgmatrix, path_annotation, path_output, level = "protein",
@@ -253,34 +259,41 @@ run_proteomics_pipeline <- function(
         test_interaction = tests_interaction, design_formula = formula,
         ref_condition  = reference_condition, ...
     )
-    # 3) Organize outputs (plot-ready)
+    # 3) Organize outputs (plot-ready). `effects` is a named list keyed by main
+    #    contrast; each element holds the all_common_effect / common_effect /
+    #    interaction_effect SummarizedExperiment objects. Per-contrast statistics
+    #    are stored in rowData() using the "<stat>_<contrast>" naming convention
+    #    (e.g. log2FC_IL13_vs_NoTreated), so a contrast can be retrieved with `$`
+    #    (e.g. effects$IL13_vs_NoTreated$all_common_effect).
     effects <- .pp_organize_effects(
         se_limma = se_limma, tests = tests,
         tests_interaction = tests_interaction, alpha = 0.05
     )
-    if(plots){
-        # 4) Volcano plots
-        # Main effects: effects without significant interaction
-        output_main_all <- .pp_export_volcano_tables(
+    if (plots) {
+        # 4) Volcano plots (written to disk as a side effect).
+        # Main effect: all proteins, ignoring interaction.
+        .pp_export_volcano_tables(
             effects = effects, tests = tests, path_output = path_output,
             experiment = experiment, effect_slot = "all_common_effect",
             file_tag = "MainEffect_AllProteins", name_col = "Genes",
-            name_imputed = "imputed", ...
+            name_imputed = "imputed"
         )
-        # Common: effects significant for condition and NOT interacting
-        output_common <- .pp_export_volcano_tables(
+        # Common effect: significant for condition and NOT interacting.
+        .pp_export_volcano_tables(
             effects = effects, tests = tests, path_output = path_output,
             experiment = experiment, effect_slot = "common_effect",
-            file_tag="CommonEffect",name_col = "Genes",name_imputed = "imputed"
+            file_tag = "CommonEffect", name_col = "Genes",
+            name_imputed = "imputed"
         )
-        # 5) Deregulogram (only if interaction tested AND factor has 2 levels)
+        # 5) Interaction volcano + deregulogram (only when interaction tested
+        #    and the interaction factor has exactly two levels).
         if (!("NA" %in% tests_interaction)) {
-            # Interaction: effects with significant interaction
-            output_interaction <- .pp_export_volcano_tables(
+            .pp_export_volcano_tables(
                 effects = effects, tests = tests, path_output = path_output,
                 experiment = experiment, effect_slot = "interaction_effect",
-                file_tag = "InteractionEffect",plot_contrasts=tests_interaction,
-                name_col = "Genes", name_imputed = "imputed", ...
+                file_tag = "InteractionEffect",
+                plot_contrasts = tests_interaction,
+                name_col = "Genes", name_imputed = "imputed"
             )
             info <- .pp_infer_interaction_factor(se_limma, tests_interaction)
             if (!is.null(info) && length(info$levels) == 2) {
@@ -293,19 +306,16 @@ run_proteomics_pipeline <- function(
                                   lfc = 1, label_col = "Genes"
                 )
             }
-            out <- list(se_raw = se0, se_filt = filt$se_filt,
-                        removed = filt$removed, se_imp   = se_imp,
-                        effects = list(output_main_all, output_interaction,
-                                       output_common))
-            return(out)
         }
-        return(list(se_raw = se0, se_filt = filt$se_filt,
-                    removed = filt$removed, se_imp   = se_imp,
-                    effects = list(output_main_all,
-                                   output_common)))
-    }else{
-        return(list(se_raw = se0, se_filt = filt$se_filt,removed = filt$removed,
-                    se_imp   = se_imp
-        ))
     }
+    # 6) Single, consistent return value. `effects` is ALWAYS present and keyed
+    #    by contrast, independent of `plots`, so downstream code can rely on
+    #    res$effects$<contrast>$all_common_effect.
+    list(
+        se_raw  = se0,
+        se_filt = filt$se_filt,
+        removed = filt$removed,
+        se_imp  = se_imp,
+        effects = effects
+    )
 }

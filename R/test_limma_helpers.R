@@ -2,13 +2,18 @@
 #' @keywords internal
 #' @noRd
 .tl_check_inputs <- function(se, design_formula, ref_condition, test, test_interaction){
-    assertthat::assert_that(
-        inherits(se, "SummarizedExperiment"),
-        is(design_formula, "formula"),
-        is.character(ref_condition), length(ref_condition) == 1,
-        is.character(test), length(test) >= 1,
+    ok <- inherits(se, "SummarizedExperiment") &&
+        methods::is(design_formula, "formula") &&
+        is.character(ref_condition) && length(ref_condition) == 1L &&
+        is.character(test) && length(test) >= 1L &&
         is.character(test_interaction)
-    )
+    if (!ok) {
+        stop("Invalid inputs to test_limma_customized(): check that `se` is a ",
+             "SummarizedExperiment, `design_formula` is a formula, ",
+             "`ref_condition` is a single string, `test` is a non-empty ",
+             "character vector and `test_interaction` is character.",
+             call. = FALSE)
+    }
     cd <- as.data.frame(SummarizedExperiment::colData(se))
     need_cd <- c("label", "condition", "replicate", "batch", "donor_id")
     if (!all(need_cd %in% colnames(cd))) {
@@ -88,7 +93,7 @@
     cn_name <- gsub(" - ", "_vs_", cn_expr)
 
     cm <- limma::makeContrasts(contrasts = stats::setNames(cn_expr, cn_name),
-                                levels = design)
+                               levels = design)
     fit <- limma::eBayes(limma::contrasts.fit(fit0, cm))
 
     cond_cols <- intersect(colnames(design), names(map_mn))
@@ -109,18 +114,24 @@
         adj[keep] <- stats::p.adjust(tt$P.Value[keep], method = "BH")
         tt$adj.P.Val <- adj
 
-        dplyr::tibble(
-            ID = gene, comparison = comp_name,
+        # Wide block for this contrast, named "<stat>_<comparison>" to match the
+        # downstream naming convention consumed by plotting/visualization code.
+        block <- data.frame(
             log2FC = tt$logFC, CI.L = tt$CI.L, CI.R = tt$CI.R,
-            p.val = tt$P.Value, p.adj = tt$adj.P.Val
+            p.val = tt$P.Value, p.adj = tt$adj.P.Val,
+            row.names = gene, check.names = FALSE, stringsAsFactors = FALSE
         )
+        colnames(block) <- paste0(colnames(block), "_", comp_name)
+        block
     }
 
-    long <- dplyr::bind_rows(Map(one, cn_name, cn_expr))
-    tidyr::pivot_wider(long, id_cols = "ID",
-                       names_from = "comparison",
-                       values_from = c("log2FC","CI.L","CI.R","p.val","p.adj"),
-                       names_sep = "_")
+    blocks <- Map(one, cn_name, cn_expr)
+    # All blocks share identical row order (sort.by = "none" on the same fit),
+    # so a column bind reproduces tidyr::pivot_wider() exactly.
+    wide <- do.call(cbind, unname(blocks))
+    wide <- as.data.frame(wide, check.names = FALSE, stringsAsFactors = FALSE)
+    wide$ID <- rownames(wide)
+    wide
 }
 
 #' Clean merge to rowData(se)
@@ -129,10 +140,14 @@
 .tl_merge_rowdata <- function(se, wide_tbl){
     rd <- as.data.frame(SummarizedExperiment::rowData(se))
     rd$ID <- rownames(rd)
-    out <- dplyr::left_join(rd, wide_tbl, by = "ID")
-    rownames(out) <- out$ID
-    out$ID <- NULL
-    out
+    wide_tbl <- as.data.frame(wide_tbl, check.names = FALSE,
+                              stringsAsFactors = FALSE)
+    idx <- match(rd$ID, wide_tbl$ID)
+    add_cols <- setdiff(colnames(wide_tbl), "ID")
+    rd[add_cols] <- wide_tbl[idx, add_cols, drop = FALSE]
+    rownames(rd) <- rd$ID
+    rd$ID <- NULL
+    rd
 }
 
 #' Full contrast of interaction effects and base effects

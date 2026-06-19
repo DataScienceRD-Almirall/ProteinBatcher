@@ -1,6 +1,6 @@
 Package: ProteinBatcher
 Title: Batch Processing and Harmonization of Quantitative Proteomics Table
-Version: 0.99.1
+Version: 0.99.2
 Authors@R: 
     c(person(given = "Aitor", family ="Moruno-Cuenca", email = "morunoaitor@gmail.com", role = c("aut", "cre"), comment = c(ORCID = "0009-0009-8133-2552")),
     person(given = "Dr. Sergi", family = "Sayols-Puig", email = "sergi.sayolspuig@almirall.com", role = c("ctb"), comment = c(ORCID = "0000-0002-3877-4170")),
@@ -16,30 +16,28 @@ Description: ProteinBatcher provides utilities to read, validate, and harmonize 
     of tabular data into analysis-ready formats. It facilitates downstream differential abundance analysis using linear modeling frameworks based on limma, with explicit support for multivariable
     experimental designs including batch effects and other confounding covariates, as well as correlation-aware designs via duplicateCorrelation.
 License: MIT + file LICENSE
+URL: https://github.com/DataScienceRD-Almirall/ProteinBatcher
+BugReports: https://github.com/DataScienceRD-Almirall/ProteinBatcher/issues
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 Imports: 
-    assertthat,
     data.table,
-    dplyr,
     ggplot2,
     ggrepel,
+    grDevices,
+    grid,
     limma,
-    magrittr,
     methods,
+    readxl,
     S4Vectors,
     stats,
     SummarizedExperiment,
-    testthat,
-    tibble,
-    tidyr,
-    writexl
+    utils
 Suggests:
     knitr,
     rmarkdown,
-    readr,
-    readxl,
+    testthat (>= 3.0.0),
     htmltools
 VignetteBuilder: knitr
 biocViews: Proteomics, MassSpectrometry, DataImport, DataRepresentation, Software, BatchEffect

@@ -7,10 +7,6 @@ vignette: >
   %\VignetteIndexEntry{ProteinBatcher workflow}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
-Suggests:
-    knitr,
-    rmarkdown,
-    htmltools
 ---
 
 # Overview
@@ -111,7 +107,7 @@ package.
 ```{r}
 # Load package
 library(ProteinBatcher)
-library(readr)
+library(readxl)
 
 # Input files shipped with the package
 path_annotation <- system.file(
@@ -129,7 +125,7 @@ path_pgmatrix <- system.file(
 path_output <- tempdir()
 
 # Inspect annotation structure
-ann <- readr::read_tsv(path_annotation)
+ann <- utils::read.delim(path_annotation, check.names = FALSE)
 ```
 
 ## Sample annotation structure
