@@ -1,178 +1,223 @@
 ---
 title: "ProteinBatcher workflow"
-output: 
+output:
   rmarkdown::html_vignette:
-    code_folding: show
+    toc: true
 vignette: >
   %\VignetteIndexEntry{ProteinBatcher workflow}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
 
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
 # Overview
-Quantitative proteomics is well supported in Bioconductor for individual
-downstream tasks such as differential testing (e.g. via limma), missing-value
-imputation, or visualization. However, fully integrated downstream workflows
-that combine these steps in a single, reproducible, and design-aware pipeline
-are comparatively scarce, particularly for label-free proteomics. ProteinBatcher
-does not run upstream quantification; it operates on protein-level abundance
-matrices (the package description explicitly targets DIA-NN-style outputs).
 
-ProteinBatcher addresses this gap by providing a cohesive downstream analysis
-framework that focuses on three aspects that are often difficult to combine in
-practice:
+ProteinBatcher is a downstream analysis package for label-free quantitative
+proteomics. It does **not** perform upstream quantification: it operates on a
+protein-level abundance matrix (it specifically targets DIA-NN `pg_matrix`
+outputs) together with a sample-annotation table, and turns the sequence of
+*filtering → imputation → differential abundance testing → effect organization
+→ visualization* into a single, reproducible function call,
+`run_proteomics_pipeline()`.
 
-1. Flexible experimental designs
-    - The package is built around limma and supports:
-    - multi-factor designs (e.g. condition + batch, condition + sex),
-    - interaction testing, 
-    - paired and repeated-measures designs,
-    - correlation-aware models via duplicateCorrelation.
+The design goal is **standardization and automation of a downstream workflow 
+built on top of established Bioconductor methods**, rather
+than the introduction of new statistical methodology or new data containers.
+Concretely, ProteinBatcher contributes:
 
-    This flexibility allows users to model common proteomics scenarios such as
-    batch effects, donor effects, or preparation-day effects without rewriting
-    analysis code for each experiment.
-    
-2. End-to-end standardization of downstream steps. ProteinBatcher integrates,
-in a single workflow:
-    - missingness-based filtering,
-    - mean and left-censored (LDV) imputation strategies,
-    - differential abundance testing,
-    - systematic separation of main, common, and interaction effects,
-    - generation of plot-ready result objects.
+1. A turnkey pipeline that enforces a fixed input schema and a consistent
+   output structure, so that experiments with similar structure but different
+   designs can be analysed with the same code.
+2. A systematic separation of each contrast into *main*, *common* (batch- or
+   factor-independent) and *interaction* (factor-dependent) effects, each
+   returned as a `SummarizedExperiment`.
+3. Interpretation-oriented visualizations, in particular the **deregulogram**,
+   which compares the full effect of a contrast across the two levels of an
+   interaction factor and emphasises effect concordance and magnitude rather
+   than statistical significance alone.
 
-    By enforcing a consistent structure for inputs, models, and outputs, the
-    package reduces ad hoc analysis choices and improves reproducibility across
-    experiments.
-    
-3. Interpretation-oriented visualizations. In addition to standard volcano
-plots, ProteinBatcher implements:
-    - deregulograms, which compare full effects across the two levels of an
-        interaction factor (e.g. batch day 1 vs day 2, female vs male).
-        Deregulograms complement interaction volcano plots by emphasizing effect
-        concordance and magnitude, rather than statistical significance alone,
-        and facilitate biological interpretation of interaction effects.
-
-Importantly, ProteinBatcher is not intended to replace existing Bioconductor
-infrastructure, but rather to orchestrate and standardize well-established
-methods (notably limma) into a coherent downstream proteomics workflow.
-The package is therefore particularly suited for users who repeatedly analyze
-proteomics experiments with similar structure but varying designs, and who need
-a balance between automation and modeling flexibility.
-
-This vignette documents the workflow and outputs, but does not execute the
-full analysis. All examples rely on precomputed results stored in
-inst/extdata, ensuring portability and fast rendering during package checks.
+All intermediate and final results are stored in `SummarizedExperiment`
+objects, and all linear modelling is delegated to `limma`.
 
 # Relationship with the Bioconductor ecosystem
 
-ProteinBatcher is designed to operate within the standard Bioconductor
-infrastructure, rather than introducing new data containers or statistical
-methods. Its functionality is built by extending existing Bioconductor
-components in a consistent downstream workflow.
+Bioconductor already provides mature infrastructure for the individual steps of
+a proteomics analysis, and several packages support fully integrated,
+design-aware differential-abundance workflows. ProteinBatcher is intended to
+sit *alongside* this infrastructure, not to replace it. It is built around two
+established pillars:
 
-The package is built around two Bioconductor pillars:
+- **`SummarizedExperiment`**, used as the single container for the assay,
+  feature metadata (`rowData`) and sample metadata (`colData`); and
+- **`limma`**, used for linear modelling and empirical-Bayes moderation,
+  including multi-factor designs, interactions, and correlation-aware models
+  via `duplicateCorrelation()`.
 
-- **SummarizedExperiment** as the central container for assays, feature metadata
-(rowData) and sample metadata (colData).
-- **limma** for linear modeling and empirical Bayes moderation.
+## How ProteinBatcher differs from msqrob2
 
-All intermediate and final results in ProteinBatcher are stored in
-SummarizedExperiment objects. Missing-value filtering and imputation are
-implemented as modular steps that operate directly on SummarizedExperiment
-objects. 
+The reviewer specifically asked how ProteinBatcher relates to
+[msqrob2](https://www.bioconductor.org/packages/msqrob2). The two packages
+overlap in purpose (differential abundance in MS-based proteomics) but occupy
+clearly different design points, and they are complementary rather than
+competing.
+
+`msqrob2` contributes **statistical methodology**. It implements a robust
+linear (mixed) model framework whose parameter estimates can be stabilised by
+ridge regression, empirical-Bayes variance estimation and robust M-estimation,
+and it offers a hurdle workflow that handles missing values without requiring
+imputation. It is built on the `QFeatures` infrastructure, so it can model the
+data while consistently linking the PSM, peptide and protein levels, and can
+start either from raw peptide intensities or from summarised protein values.
+Its value lies in the modelling engine itself.
+
+`ProteinBatcher`, by contrast, does **not** introduce new statistical methods.
+It orchestrates *established* `limma` modelling into a fixed, reproducible
+downstream pipeline that operates on a plain protein-level
+`SummarizedExperiment`. Its distinctive contributions are operational rather
+than statistical: a single-call pipeline with a fixed annotation schema, a
+specific organisation of results into main / common / interaction effects, and
+dedicated interpretation plots (most notably the deregulogram). In short,
+`msqrob2` is primarily a *method* (and a peptide-to-protein modelling
+framework), whereas ProteinBatcher is primarily a *standardised wrapper and
+visualisation layer* around protein-level `limma` analysis.
+
+We therefore do not claim that flexible designs, interaction testing or
+integrated workflows are unavailable elsewhere in Bioconductor: `msqrob2`,
+among others, supports them. The motivation for ProteinBatcher is to provide a
+convention-driven, low-boilerplate route for teams that repeatedly run
+protein-level `limma` analyses with the same input/output conventions and that
+want the specific effect-separation and deregulogram outputs described below.
 
 # Input data and workflow parameters
 
-ProteinBatcher needs two input data objects and a set of workflow parameters.
-This distinction is important: the inputs define the data to be analysed,
-whereas the parameters control how the analysis is performed.
+ProteinBatcher needs two input datasets and a set of workflow parameters. The
+inputs define *what* is analysed; the parameters control *how* the analysis is
+performed.
 
 ## Input data
 
-ProteinBatcher expects exactly two input datasets:
+1. **Quantitative matrix.** A protein-by-sample matrix of quantitative
+   measurements, as produced by DIA-NN (`pg_matrix`). Rows are protein groups
+   and columns are samples.
+2. **Sample annotation table.** A tab-delimited table describing the
+   experimental design and linking each sample to its biological and technical
+   metadata.
 
-1. Quantitative matrix: A feature-by-sample matrix containing quantitative
-proteomics measurements (typically protein groups). Rows correspond to
-quantified features and columns to samples. The matrix is assumed to originate
-from an upstream workflow (e.g. FragPipe or DIANN), but ProteinBatcher does not
-depend on a specific quantification tool.
+Both are shipped with the package as example files. The chunk below locates
+them with `system.file()` and reads the annotation table with base R
+(`read.delim()`); no external reader package is required. We also record
+whether the example files are available, so that the rest of the vignette
+degrades gracefully if they are not.
 
-2. Sample annotation table: A tab-delimited table describing the experimental
-design and linking each sample to its biological and technical metadata.
-
-Both inputs are provided in this vignette as example datasets shipped with the
-package.
-
-```{r}
+```{r paths}
 # Load package
 library(ProteinBatcher)
-library(readxl)
 
 # Input files shipped with the package
-path_annotation <- system.file(
-  "extdata", "annotation_HaCaT.tsv",
-  package = "ProteinBatcher"
-)
-
-path_pgmatrix <- system.file(
-  "extdata",
-  "2024MK017_HaCaT_Stimulation_1to24_Astral_report.pg_matrix.tsv",
-  package = "ProteinBatcher"
-)
-
-# Output directory (portable, not used during vignette build)
+path_annotation <- system.file("extdata", "annotation_HaCaT.tsv",
+                                package = "ProteinBatcher")
+path_pgmatrix   <- system.file(
+  "extdata", "2024MK017_HaCaT_Stimulation_1to24_Astral_report.pg_matrix.tsv",
+  package = "ProteinBatcher")
 path_output <- tempdir()
 
-# Inspect annotation structure
+# Inspect annotation structure (base R, sin readr)
 ann <- utils::read.delim(path_annotation, check.names = FALSE)
 ```
 
+The annotation table read above has one row per sample. We can confirm its
+shape and look at the first rows:
+
+```{r show-annotation}
+dim(ann)
+head(ann)
+```
+
 ## Sample annotation structure
-The annotation table must contain at least a condition column defining the main
-experimental comparison. Additional columns enable more complex designs such as
-batch correction, paired analyses, and interaction testing.
 
-The following columns are supported:
+For the high-level `run_proteomics_pipeline()` entry point, the annotation
+table is validated against a **fixed set of column names**. These names are
+*required* (not merely suggested): the input validator stops with an
+informative error if any of them is missing, because the pipeline locates each
+piece of metadata by name when it builds `colData` and when it assembles the
+`limma` design. The required columns are:
 
-- file: raw data file identifier
-- sample / sample_name: sample identifiers
-- condition: main experimental condition of interest
-- replicate: technical replicate identifier (repeated measurements of the
-    same sample under the same condition)
-- block: biological replicate or donor identifier
-- batch: batch or preparation factor (e.g. factor to control for against
-    condition)
+- **`file`** — raw-data file identifier for each sample (used as the matching
+  label against the quantitative matrix columns).
+- **`sample`** and **`sample_name`** — sample identifiers; `sample_name` must be
+  unique and becomes the sample id in `colData`.
+- **`condition`** — the main experimental factor of interest (the factor that
+  the `tests` contrasts compare).
+- **`replicate`** — repeated-measurement identifier, used by paired /
+  correlation-aware designs.
+- **`batch`** — a batch or sample-preparation factor (e.g. acquisition day),
+  used as a covariate and as the interaction factor in the examples below.
+- **`donor_id`** — biological replicate / donor identifier, used as the blocking
+  factor in paired or repeated-measures models.
 
-Only columns explicitly referenced in the design formula are required.
+The set is intentionally fixed so that the same pipeline code can be reused
+across experiments without per-experiment column-mapping: the conventions are
+the contract. Which of these factors actually enters the model is then
+determined by the design `formula` and by the `paired` / `block_effect`
+parameters; columns that are present but not referenced by the formula simply
+remain available in `colData` for inspection.
 
 ## Workflow parameters
 
-In addition to the input data, ProteinBatcher requires several parameters that
-define how the analysis is carried out. These parameters do not represent
-additional inputs, but control filtering, modeling, and output generation.
-These parameters provide flexibility on the specific analysis to conduct.
+In addition to the two inputs, the pipeline takes parameters that control
+filtering, modelling and output generation. The most important are:
 
-Key parameters include:
+- **`percent_missing`** — missingness threshold (in %) for feature filtering.
+- **`tests`** — main `condition` contrasts to evaluate, written as
+  `"<level>_vs_<reference>"`.
+- **`tests_interaction`** — interaction coefficients to evaluate, or `"NA"` to
+  disable interaction testing.
+- **`formula`** — the `limma` design formula (main effects and interactions).
+- **`reference_condition`** — the reference level of `condition`.
+- **`paired`** / **`block_effect`** — options for paired and correlation-aware
+  models.
+- **`ldv_source`** — strategy for left-censored (LDV) imputation
+  (`"global"` or `"per-condition"`).
+- **`plots`** — whether to also write result tables and PDF figures to
+  `path_output`.
 
-- percent_missing: threshold used for missingness-based filtering
-- tests: main condition contrasts to be evaluated
-- tests_interaction: interaction contrasts or coefficients (optional)
-- formula: limma design formula defining main effects and interactions
-- reference_condition: reference level for the condition factor
-- paired / block_effect: options for paired designs and correlation-aware
-    models
-- ldv_source: strategy for LDV (left-censored) imputation
-- plots: whether to generate output tables and PDF plots
+# The example data set
 
-These parameters are illustrated in the workflow section below, but the full
-analysis is not executed during vignette rendering.
+The shipped example is a HaCaT keratinocyte stimulation experiment
+(`2024MK017`). It contains `r if (exists("ann")) nrow(ann) else 24` samples
+organised as a two-factor design:
 
+- **`condition`** with four levels: `NoTreated` (reference), `IL13`, `IL22`,
+  and `COMBO` (the IL13 + IL22 combination);
+- **`batch`** with two levels: `day1` and `day2` (the acquisition day).
 
-# Example 1: Workflow with interaction testing (condition-by-batch)
+Each condition is measured in three samples on each of the two days
+(4 conditions × 2 days × 3 = 24 samples), and all samples come from the same
+cell line (`donor_id = 1`). This balanced design is what makes the
+`condition:batch` interaction estimable: it lets us ask not only whether a
+treatment changes protein abundance on average, but also whether that change
+differs between the two acquisition days. The cross-tabulation of the design
+is:
 
-```{r}
-# Parameters
+```{r design-table}
+table(condition = ann$condition, batch = ann$batch)
+```
+
+# Example 1: workflow with interaction testing (condition-by-batch)
+
+In this first example we model the four conditions together with the batch
+factor and their interaction, `~ 0 + condition + batch + condition:batch`. We
+request the three treatment-vs-control contrasts and the matching
+condition-by-day interaction coefficients. The chunk below only defines the
+parameters; nothing is computed yet.
+
+```{r ex1-params}
 experiment <- "HaCaT"
 percent_missing <- 50
 
@@ -188,221 +233,14 @@ tests_interaction <- c(
   "COMBO.batchday2"
 )
 reference_condition <- "NoTreated"
-
-# Workflow
-res <- run_proteomics_pipeline(
-  path_pgmatrix        = path_pgmatrix,
-  path_annotation      = path_annotation,
-  path_output          = path_output,
-  tests                = tests,
-  tests_interaction    = tests_interaction,
-  formula              = formula,
-  reference_condition  = reference_condition,
-  percent_missing      = percent_missing,
-  ldv_source           = "per-condition",
-  experiment           = experiment,
-  plots                = FALSE # Use TRUE to generate outputs
-)
 ```
 
-## Inspecting filtering and imputation outputs (xlsx files)
+We now run the full pipeline. With `plots = FALSE` the function performs
+filtering, imputation, differential testing and effect organisation in memory
+and returns a single list; it does not write any files. (Set `plots = TRUE` to
+additionally export the tables and PDF figures shown later in this vignette.)
 
-```{r}
-## Inspect filtering and imputation summary tables
-library(readxl)
-
-path_filtered <- system.file(
-  "extdata",
-  "HaCaT_filtered_out_proteins.xlsx",
-  package = "ProteinBatcher"
-)
-
-path_imputed <- system.file(
-  "extdata",
-  "HaCaT_Imputation_step.xlsx",
-  package = "ProteinBatcher"
-)
-
-filtered_df <- readxl::read_xlsx(path_filtered)
-imputed_df  <- readxl::read_xlsx(path_imputed)
-
-head(filtered_df)
-head(imputed_df)
-```
-
-These Excel files are generated by the workflow to make the preprocessing steps
-fully transparent.
-
-HaCaT_filtered_out_proteins.xlsx lists proteins removed during the
-missingness-based filtering step. This allows users to verify which features
-were excluded and why (e.g. insufficient detection across conditions).
-
-HaCaT_Imputation_step.xlsx summarizes the imputation strategy applied to each
-protein and sample, distinguishing mean-imputed values from LDV
-(left‑censored) imputations.
-
-Together, these tables allow direct comparison of the dataset before and after
-filtering and imputation, which is critical for quality control and
-interpretability in label‑free proteomics analyses.
-
-
-Note: For package size reasons, this vignette uses a reduced example of the
-imputation summary table. The full table is generated during a standard
-workflow run.
-
-## Differential effects - IL13 vs NoTreated contrast
-
-From this point onwards, we focus exclusively on the IL13 vs NoTreated
-contrast to illustrate how different effect types are interpreted.
-
-### Main effect (all proteins)
-
-```{r echo=FALSE, message=FALSE, warning=FALSE, out.width="80%"}
-knitr::include_graphics(
-  system.file(
-    "extdata",
-    "HaCaT_MainEffect_AllProteins_IL13_vs_NoTreated.png",
-    package = "ProteinBatcher"
-  )
-)
-```
-
-The Main Effect (All Proteins) volcano plot shows the global IL13 effect in 
-HaCaT cell lines, ignoring any interaction terms (batch). Every tested protein
-is included, regardless of whether its response depends on batch.
-
-How to read it:
-
-- The x‑axis represents the estimated log2 fold change (IL13 vs NoTreated).
-- The y‑axis represents statistical significance (adjusted p‑value).
-
-This plot answers the question: “Which proteins are affected by IL13 on average?”
-
-This view is useful for an initial overview, but it does not distinguish stable
-effects from batch‑dependent ones.
-
-### Common effect (batch‑independent proteins)
-
-```{r echo=FALSE, message=FALSE, warning=FALSE, out.width="80%"}
-knitr::include_graphics(
-  system.file(
-    "extdata",
-    "HaCaT_CommonEffect_IL13_vs_NoTreated.png",
-    package = "ProteinBatcher"
-  )
-)
-```
-
-The Common Effect plot shows proteins whose IL13 response is not significantly
-modulated by batch. These proteins pass the interaction test and are therefore
-considered stable across batch levels.
-
-How to read it:
-
-- Proteins here show a consistent IL13 effect independent of interaction.
-- These are typically the most robust candidates for biological interpretation,
-as their direction and magnitude are reproducible across experimental batches
-
-Conceptually, this plot answers:
-“Which IL13‑responsive proteins behave consistently across batches?”
-
-
-### Interaction effect (batch‑dependent proteins)
-
-```{r echo=FALSE, message=FALSE, warning=FALSE, out.width="80%"}
-knitr::include_graphics(
-  system.file(
-    "extdata",
-    "HaCaT_InteractionEffect_IL13.batchday2.png",
-    package = "ProteinBatcher"
-  )
-)
-```
-
-The Interaction Effect plot highlights proteins whose IL13 response differs
-between batch levels (here: day1 vs day2).
-
-How to read it:
-
-- Significance is driven by the interaction term, not by the average IL13 effect.
-- A protein may appear weak or even non-significant in the main effect plot but
-still show a strong interaction if its response reverses or changes magnitude
-between batches.
-
-This plot answers:
-“Which proteins show batch-specific IL13 effects?”
-
-### Deregulogram: interpreting batch-dependent effects
-
-```{r echo=FALSE, message=FALSE, warning=FALSE, out.width="80%"}
-knitr::include_graphics(
-  system.file(
-    "extdata",
-    "HaCaT_Deregulogram_IL13_vs_NoTreated_batch.png",
-    package = "ProteinBatcher"
-  )
-)
-```
-
-The deregulogram compares full IL13 effects between the two batch levels.
-
-- y-axis: full IL13 effect in the reference batch (e.g. day1)
-- x-axis: full IL13 effect in the other batch (day2), computed as
-main effect + interaction effect
-
-How to read it:
-
-- Proteins along the diagonal behave similarly in both batches.
-- Proteins deviating from the diagonal show batch-dependent regulation.
-- Highlighted points represent proteins for which the interaction is both
-statistically significant and biologically relevant (effect size threshold).
-
-**Key interpretation note**:
-The deregulogram is intentionally more restrictive than the interaction volcano.
-It is designed to emphasize interpretable, direction-changing or magnitude-shifting
-effects, rather than listing all statistically significant interactions. As a result,
-the set of highlighted proteins is not expected to match one-to-one with the
-interaction volcano, but be more stringent.
-
-# Example 2: Workflow without interaction testing
-
-In some experiments, the main goal is to quantify a global condition effect
-without explicitly testing whether that effect depends on a secondary factor.
-Typical scenarios include:
-
-- experiments with a single experimental factor and no obvious batch structure,
-designs where batches are already well balanced and considered negligible,
-analyses where interaction testing would be underpowered or biologically
-uninformative.
-
-- In these cases, interaction terms can be omitted from the model and only the
-main condition effect is evaluated.
-
-At the level of the workflow, this corresponds to:
-
-- using a design formula without interaction terms, and 
-setting tests_interaction = "NA".
-
-Here we use a simple condition-only model:
-
-```{r}
-# Workflow parameters (no interaction testing)
-experiment <- "HaCaT"
-percent_missing <- 50
-
-formula <- ~ 0 + condition
-tests <- c(
-  "IL13_vs_NoTreated",
-  "IL22_vs_NoTreated",
-  "COMBO_vs_NoTreated"
-)
-tests_interaction <- "NA"
-reference_condition <- "NoTreated"
-```
-
-Running the pipeline
-
-```{r}
+```{r ex1-run}
 res <- run_proteomics_pipeline(
   path_pgmatrix        = path_pgmatrix,
   path_annotation      = path_annotation,
@@ -416,26 +254,235 @@ res <- run_proteomics_pipeline(
   experiment           = experiment,
   plots                = FALSE
 )
-
 ```
 
-When tests_interaction = "NA":
+The returned object is a named list. `se_raw`, `se_filt` and `se_imp` are the
+`SummarizedExperiment` objects after import, filtering and imputation
+respectively; `removed` is a `data.frame` of the proteins dropped by the
+missingness filter; and `effects` holds the organised results. Inspecting the
+imputed object shows the protein-by-sample assay together with the metadata the
+pipeline attached during imputation:
 
-- only main effects are estimated and reported,
-- all proteins are treated as responding homogeneously across samples,
-- no separation into common versus interaction effects is performed.
+```{r ex1-structure}
+names(res)
+res$se_imp
+```
 
-This configuration answers the question:
+## Accessing the organised effects
 
-“Which proteins are differentially abundant between conditions on average?”
+`effects` is a list **keyed by the main contrast**, so a given contrast can be
+retrieved directly with `$`. Each element is itself a list of three
+`SummarizedExperiment` objects — `all_common_effect`, `common_effect` and
+`interaction_effect` — and the per-contrast statistics
+(`log2FC`, `CI.L`, `CI.R`, `p.val`, `p.adj`) are stored in their `rowData()`
+under the `"<stat>_<contrast>"` naming convention (for example
+`log2FC_IL13_vs_NoTreated`). This is the structure consumed by the downstream
+visualisation helpers.
 
-and is appropriate when there is no strong prior reason to expect
-factor-dependent responses or when the analysis is intended as a first check,
-global comparison.
+```{r ex1-effects}
+# Contrasts available, and direct access with `$`
+names(res$effects)
+il13 <- res$effects$IL13_vs_NoTreated
+names(il13)
 
-# sessionInfo()
+# Each slot is a SummarizedExperiment; statistics live in rowData()
+il13$all_common_effect
+head(colnames(SummarizedExperiment::rowData(il13$all_common_effect)))
+```
 
-```{r}
+## Filtering and imputation summary tables
+
+When `plots = TRUE`, the pipeline also writes plain-text (CSV) summaries of the
+preprocessing steps so that they are fully transparent and can be re-read with
+base R. The package ships precomputed copies of these tables as example
+outputs. The chunk below reads them with `read.csv()` if they are present:
+
+- `HaCaT_filtered_out_proteins.csv` lists the proteins removed by the
+  missingness filter, so users can verify exactly which features were excluded.
+- `HaCaT_Imputation_before.csv` and `HaCaT_Imputation_after.csv` give the
+  protein-by-sample matrix immediately before and after imputation, allowing a
+  direct before/after comparison for quality control.
+
+```{r ex1-tables}
+path_filtered <- system.file(
+  "extdata", "HaCaT_filtered_out_proteins.csv",
+  package = "ProteinBatcher"
+)
+path_before <- system.file(
+  "extdata", "HaCaT_Imputation_before.csv",
+  package = "ProteinBatcher"
+)
+path_after <- system.file(
+  "extdata", "HaCaT_Imputation_after.csv",
+  package = "ProteinBatcher"
+)
+
+if (nzchar(path_filtered)) {
+  filtered_df <- read.csv(path_filtered, check.names = FALSE,
+                          stringsAsFactors = FALSE)
+  head(filtered_df)
+}
+```
+
+```{r ex1-tables-imp}
+if (nzchar(path_before) && nzchar(path_after)) {
+  before_df <- read.csv(path_before, check.names = FALSE,
+                        stringsAsFactors = FALSE)
+  after_df  <- read.csv(path_after,  check.names = FALSE,
+                        stringsAsFactors = FALSE)
+  # First proteins, first few columns, before vs after imputation
+  head(before_df[, seq_len(min(5, ncol(before_df)))])
+  head(after_df[, seq_len(min(5, ncol(after_df)))])
+}
+```
+
+The "before" table still contains missing values (`NA`); in the "after" table
+these have been replaced either by a within-condition mean (when a protein is
+only partially missing in a condition) or by a left-censored low-value draw
+(when it is essentially absent), which is why the imputed matrix has no missing
+entries.
+
+## Differential effects: IL13 vs NoTreated
+
+From here we focus on the `IL13_vs_NoTreated` contrast to illustrate how the
+three effect types are read. The figures below are the PNG outputs shipped with
+the package; each chunk renders the figure only if it is present.
+
+### Main effect (all proteins)
+
+The main-effect volcano shows the *average* IL13 effect across both batch days,
+ignoring the interaction term. Every tested protein is included regardless of
+whether its response depends on the day.
+
+```{r ex1-fig-main, echo = FALSE, out.width = "80%"}
+p_main <- system.file(
+  "extdata", "HaCaT_MainEffect_AllProteins_IL13_vs_NoTreated.png",
+  package = "ProteinBatcher"
+)
+if (nzchar(p_main)) knitr::include_graphics(p_main)
+```
+
+The x-axis is the estimated log2 fold change (IL13 vs NoTreated) and the y-axis
+is statistical significance (−log10 adjy frusted p-value); points awaom the
+centre and high up are strongly and significantly regulated. This view answers
+"which proteins are affected by IL13 on average?", but it does not yet separate
+stable effects from day-dependent ones.
+
+### Common effect (batch-independent proteins)
+
+The common-effect volcano restricts attention to proteins whose IL13 response
+is **not** significantly modulated by batch, i.e. those that fail the
+interaction test and are therefore consistent across days.
+
+```{r ex1-fig-common, echo = FALSE, out.width = "80%"}
+p_common <- system.file(
+  "extdata", "HaCaT_CommonEffect_IL13_vs_NoTreated.png",
+  package = "ProteinBatcher"
+)
+if (nzchar(p_common)) knitr::include_graphics(p_common)
+```
+
+Because their direction and magnitude reproduce across batches, these proteins
+are usually the most robust candidates for biological interpretation. This view
+answers "which IL13-responsive proteins behave consistently across days?".
+
+### Interaction effect (batch-dependent proteins)
+
+The interaction volcano highlights proteins whose IL13 response *differs*
+between day1 and day2. Here significance is driven by the interaction
+coefficient, not by the average effect, so a protein can look weak in the
+main-effect plot yet be strongly significant here if its response changes
+between days.
+
+```{r ex1-fig-interaction, echo = FALSE, out.width = "80%"}
+p_inter <- system.file(
+  "extdata", "HaCaT_InteractionEffect_IL13.batchday2.png",
+  package = "ProteinBatcher"
+)
+if (nzchar(p_inter)) knitr::include_graphics(p_inter)
+```
+
+This view answers "which proteins show day-specific IL13 effects?".
+
+### Deregulogram: interpreting batch-dependent effects
+
+The deregulogram compares the *full* IL13 effect between the two batch days.
+The y-axis is the full IL13 effect in the reference day (day1) and the x-axis is
+the full effect in the other day (day2), computed as main effect + interaction
+effect.
+
+```{r ex1-fig-dereg, echo = FALSE, out.width = "80%"}
+p_dereg <- system.file(
+  "extdata", "HaCaT_Deregulogram_IL13_vs_NoTreated_batch.png",
+  package = "ProteinBatcher"
+)
+if (nzchar(p_dereg)) knitr::include_graphics(p_dereg)
+```
+
+Proteins on the diagonal behave the same on both days; proteins off the
+diagonal are regulated differently between days. Highlighted points are those
+for which the interaction is both statistically significant and large enough to
+pass an effect-size threshold. The deregulogram is deliberately more
+restrictive than the interaction volcano: it emphasises interpretable,
+direction-changing or magnitude-shifting effects, so its highlighted set is
+expected to be a stricter subset of the significant interactions rather than a
+one-to-one match.
+
+# Example 2: workflow without interaction testing
+
+When the goal is only a global condition effect — for instance with a single
+experimental factor, with well-balanced and negligible batches, or when
+interaction testing would be underpowered — the interaction terms can be
+dropped from the model and `tests_interaction` set to `"NA"`. The parameters
+below specify a condition-only model:
+
+```{r ex2-params}
+experiment <- "HaCaT"
+percent_missing <- 50
+
+formula <- ~ 0 + condition
+tests <- c(
+  "IL13_vs_NoTreated",
+  "IL22_vs_NoTreated",
+  "COMBO_vs_NoTreated"
+)
+tests_interaction <- "NA"
+reference_condition <- "NoTreated"
+```
+
+Running the pipeline with these parameters proceeds exactly as before, but only
+the main condition effects are estimated:
+
+```{r ex2-run}
+res_no_int <- run_proteomics_pipeline(
+  path_pgmatrix        = path_pgmatrix,
+  path_annotation      = path_annotation,
+  path_output          = path_output,
+  tests                = tests,
+  tests_interaction    = tests_interaction,
+  formula              = formula,
+  reference_condition  = reference_condition,
+  percent_missing      = percent_missing,
+  ldv_source           = "per-condition",
+  experiment           = experiment,
+  plots                = FALSE
+)
+```
+
+With `tests_interaction = "NA"` only main effects are estimated and reported,
+all proteins are treated as responding homogeneously across samples, and no
+common-versus-interaction separation is performed. The `effects` list is still
+keyed by contrast, so the results are accessed the same way; the
+`interaction_effect` slot is simply empty. This configuration answers "which
+proteins are differentially abundant between conditions on average?":
+
+```{r ex2-structure}
+names(res_no_int$effects)
+res_no_int$effects$IL13_vs_NoTreated$all_common_effect
+```
+
+# Session info
+
+```{r session}
 sessionInfo()
 ```
-
